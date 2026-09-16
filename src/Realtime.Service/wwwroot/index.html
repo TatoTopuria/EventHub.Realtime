@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Realtime Seat Availability Demo</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f4f1ea;
+            --panel: #fffaf0;
+            --text: #1f2933;
+            --accent: #9d5c0d;
+            --muted: #6b7280;
+            --available: #d1fae5;
+            --reserved: #fee2e2;
+            --border: #e5dccf;
+        }
+
+        body {
+            margin: 0;
+            font-family: Georgia, "Times New Roman", serif;
+            background: radial-gradient(circle at top, #fff6dd 0%, var(--bg) 55%, #e7ddd0 100%);
+            color: var(--text);
+        }
+
+        main {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 32px 20px 48px;
+        }
+
+        .panel {
+            background: rgba(255, 250, 240, 0.92);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 16px 50px rgba(90, 62, 23, 0.08);
+            backdrop-filter: blur(6px);
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: clamp(2rem, 4vw, 3.2rem);
+            letter-spacing: 0.04em;
+        }
+
+        p {
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin: 24px 0;
+        }
+
+        input, button {
+            font: inherit;
+            border-radius: 12px;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+        }
+
+        button {
+            background: var(--accent);
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+
+        button.secondary {
+            background: #44515f;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+            gap: 10px;
+        }
+
+        li {
+            border-radius: 14px;
+            padding: 16px 12px;
+            text-align: center;
+            font-weight: bold;
+            border: 1px solid var(--border);
+            transition: transform 180ms ease, background 180ms ease;
+        }
+
+        li.available {
+            background: var(--available);
+        }
+
+        li.reserved {
+            background: var(--reserved);
+            transform: translateY(-2px);
+        }
+
+        .status {
+            margin: 18px 0;
+            font-size: 0.95rem;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+<main>
+    <section class="panel">
+        <h1>Live Seat Availability</h1>
+        <p>Connect to an event group through the gateway, then reserve or cancel seats through the Booking API to watch updates arrive in real time.</p>
+        <div class="controls">
+            <input id="eventId" type="text" placeholder="Event ID">
+            <input id="seatList" type="text" value="A1,A2,A3,A4,B1,B2,B3,B4" placeholder="Comma-separated seats">
+            <button id="connectButton">Connect</button>
+            <button id="disconnectButton" class="secondary">Disconnect</button>
+        </div>
+        <div id="status" class="status">Disconnected</div>
+        <ul id="seats"></ul>
+    </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js" integrity="sha512-qxTXS2R4P7QQvEZQ9YwxM0M0JmQ7P8OAK0V2Tszvx41IwlbG1udM4xA9M0frzlr0D6N7jM3jlhxA9l3YwM6SxA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+    const seatItems = new Map();
+    const seatsElement = document.getElementById("seats");
+    const statusElement = document.getElementById("status");
+    const eventIdInput = document.getElementById("eventId");
+    const seatListInput = document.getElementById("seatList");
+
+    let connection = null;
+    let currentEventId = null;
+
+    function renderSeats() {
+        seatsElement.innerHTML = "";
+        seatItems.forEach((reserved, seatNumber) => {
+            const item = document.createElement("li");
+            item.className = reserved ? "reserved" : "available";
+            item.textContent = seatNumber;
+            seatsElement.appendChild(item);
+        });
+    }
+
+    function buildSeatMap() {
+        seatItems.clear();
+        seatListInput.value.split(",")
+            .map(value => value.trim())
+            .filter(Boolean)
+            .forEach(seatNumber => seatItems.set(seatNumber, false));
+        renderSeats();
+    }
+
+    async function disconnect() {
+        if (!connection) {
+            return;
+        }
+
+        await connection.stop();
+        connection = null;
+        currentEventId = null;
+        statusElement.textContent = "Disconnected";
+    }
+
+    async function connect() {
+        await disconnect();
+        buildSeatMap();
+
+        currentEventId = eventIdInput.value.trim();
+        if (!currentEventId) {
+            statusElement.textContent = "Enter an event ID before connecting.";
+            return;
+        }
+
+        connection = new signalR.HubConnectionBuilder()
+            .withUrl("/hubs/seats")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("SeatReserved", (eventId, seatNumber) => {
+            if (eventId.toLowerCase() !== currentEventId.toLowerCase()) {
+                return;
+            }
+
+            seatItems.set(seatNumber, true);
+            renderSeats();
+            statusElement.textContent = `Seat ${seatNumber} reserved.`;
+        });
+
+        connection.on("SeatReleased", (eventId, seatNumber) => {
+            if (eventId.toLowerCase() !== currentEventId.toLowerCase()) {
+                return;
+            }
+
+            seatItems.set(seatNumber, false);
+            renderSeats();
+            statusElement.textContent = `Seat ${seatNumber} released.`;
+        });
+
+        await connection.start();
+        await connection.invoke("JoinEvent", currentEventId);
+        statusElement.textContent = `Connected to event ${currentEventId}.`;
+    }
+
+    buildSeatMap();
+    document.getElementById("connectButton").addEventListener("click", connect);
+    document.getElementById("disconnectButton").addEventListener("click", disconnect);
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Realtime.Service/Realtime.Service.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Realtime.Service.IntegrationTests/Realtime.Service.IntegrationTests.csproj" />
+    <Project Path="tests/Realtime.Service.UnitTests/Realtime.Service.UnitTests.csproj" />
+  </Folder>
+</Solution>
