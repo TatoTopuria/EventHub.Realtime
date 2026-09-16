@@ -1,6 +1,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS build
 ARG EVENTHUB_NUGET_FEED=http://host.docker.internal:5555/v3/index.json
+ARG EVENTHUB_NUGET_USER
+ARG EVENTHUB_NUGET_TOKEN
 ENV EVENTHUB_NUGET_FEED=${EVENTHUB_NUGET_FEED}
+ENV EVENTHUB_NUGET_USER=${EVENTHUB_NUGET_USER}
+ENV EVENTHUB_NUGET_TOKEN=${EVENTHUB_NUGET_TOKEN}
 WORKDIR /src
 COPY ["Directory.Build.props", "Directory.Packages.props", "nuget.config", "./"]
 COPY ["src/Realtime.Service/Realtime.Service.csproj", "src/Realtime.Service/"]
